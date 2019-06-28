@@ -58,7 +58,7 @@
 
 // Number of maximum high/Low changes per packet.
 // We can handle up to (unsigned long) => 32 bit * 2 H/L changes per bit + 2 for sync
-#define RCSWITCH_MAX_CHANGES 67
+#define RCSWITCH_MAX_CHANGES (512*2+2)
 
 class RCSwitch {
 
@@ -87,7 +87,7 @@ class RCSwitch {
     bool available();
     void resetAvailable();
 
-    unsigned long getReceivedValue();
+    char* getReceivedValue();
     unsigned int getReceivedBitlength();
     unsigned int getReceivedDelay();
     unsigned int getReceivedProtocol();
@@ -169,11 +169,12 @@ class RCSwitch {
 
     #if not defined( RCSwitchDisableReceiving )
     static int nReceiveTolerance;
-    volatile static unsigned long nReceivedValue;
+    volatile static uint8_t nReceivedValue[64];
     volatile static unsigned int nReceivedBitlength;
     volatile static unsigned int nReceivedDelay;
     volatile static unsigned int nReceivedProtocol;
     const static unsigned int nSeparationLimit;
+    volatile static bool nReceivedNewMessage;
     /* 
      * timings[0] contains sync timing, followed by a number of bits
      */

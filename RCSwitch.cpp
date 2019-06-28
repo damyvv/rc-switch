@@ -31,6 +31,7 @@
   Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
 */
 #include "RCSwitch.h"
+#include <stdio.h>
 
 #ifdef RaspberryPi
     // PROGMEM and _P functions are for AVR based microprocessors,
@@ -88,7 +89,8 @@ enum {
 };
 
 #if not defined( RCSwitchDisableReceiving )
-volatile unsigned long RCSwitch::nReceivedValue = 0;
+volatile uint8_t RCSwitch::nReceivedValue[64] = {0};
+volatile bool RCSwitch::nReceivedNewMessage = false;
 volatile unsigned int RCSwitch::nReceivedBitlength = 0;
 volatile unsigned int RCSwitch::nReceivedDelay = 0;
 volatile unsigned int RCSwitch::nReceivedProtocol = 0;
@@ -107,7 +109,7 @@ RCSwitch::RCSwitch() {
   #if not defined( RCSwitchDisableReceiving )
   this->nReceiverInterrupt = -1;
   this->setReceiveTolerance(60);
-  RCSwitch::nReceivedValue = 0;
+  memset((uint8_t*) RCSwitch::nReceivedValue, 0, 64);
   #endif
 }
 
@@ -593,7 +595,7 @@ void RCSwitch::enableReceive(int interrupt) {
 
 void RCSwitch::enableReceive() {
   if (this->nReceiverInterrupt != -1) {
-    RCSwitch::nReceivedValue = 0;
+    memset((void*) RCSwitch::nReceivedValue, 0, 64);
     RCSwitch::nReceivedBitlength = 0;
 #if defined(RaspberryPi) // Raspberry Pi
     wiringPiISR(this->nReceiverInterrupt, INT_EDGE_BOTH, &handleInterrupt);
@@ -614,15 +616,16 @@ void RCSwitch::disableReceive() {
 }
 
 bool RCSwitch::available() {
-  return RCSwitch::nReceivedValue != 0;
+  return RCSwitch::nReceivedNewMessage;
 }
 
 void RCSwitch::resetAvailable() {
-  RCSwitch::nReceivedValue = 0;
+  memset((void*) RCSwitch::nReceivedValue, 0, 64);
 }
 
-unsigned long RCSwitch::getReceivedValue() {
-  return RCSwitch::nReceivedValue;
+char* RCSwitch::getReceivedValue() {
+  RCSwitch::nReceivedNewMessage = false;
+  return (char*) RCSwitch::nReceivedValue;
 }
 
 unsigned int RCSwitch::getReceivedBitlength() {
@@ -657,7 +660,6 @@ bool RECEIVE_ATTR RCSwitch::receiveProtocol(const int p, unsigned int changeCoun
     memcpy_P(&pro, &proto[p-1], sizeof(Protocol));
 #endif
 
-    unsigned long code = 0;
     //Assuming the longer pulse length is the pulse captured in timings[0]
     const unsigned int syncLengthInPulses =  ((pro.syncFactor.low) > (pro.syncFactor.high)) ? (pro.syncFactor.low) : (pro.syncFactor.high);
     const unsigned int delay = RCSwitch::timings[0] / syncLengthInPulses;
@@ -681,24 +683,27 @@ bool RECEIVE_ATTR RCSwitch::receiveProtocol(const int p, unsigned int changeCoun
      * The 2nd saved duration starts the data
      */
     const unsigned int firstDataTiming = (pro.invertedSignal) ? (2) : (1);
+    memset((void*) RCSwitch::nReceivedValue, 0, 64);
 
+    if ((changeCount - 2) % 16 != 0) return false; // Not full bytes
+    
+    unsigned int j = 0;
     for (unsigned int i = firstDataTiming; i < changeCount - 1; i += 2) {
-        code <<= 1;
         if (diff(RCSwitch::timings[i], delay * pro.zero.high) < delayTolerance &&
             diff(RCSwitch::timings[i + 1], delay * pro.zero.low) < delayTolerance) {
             // zero
         } else if (diff(RCSwitch::timings[i], delay * pro.one.high) < delayTolerance &&
                    diff(RCSwitch::timings[i + 1], delay * pro.one.low) < delayTolerance) {
             // one
-            code |= 1;
+            RCSwitch::nReceivedValue[j/8] |= 1 << (7-(j%8));
         } else {
             // Failed
             return false;
         }
+	j++;
     }
 
     if (changeCount > 7) {    // ignore very short transmissions: no device sends them, so this must be noise
-        RCSwitch::nReceivedValue = code;
         RCSwitch::nReceivedBitlength = (changeCount - 1) / 2;
         RCSwitch::nReceivedDelay = delay;
         RCSwitch::nReceivedProtocol = p;
@@ -730,6 +735,7 @@ void RECEIVE_ATTR RCSwitch::handleInterrupt() {
       if (repeatCount == 2) {
         for(unsigned int i = 1; i <= numProto; i++) {
           if (receiveProtocol(i, changeCount)) {
+            RCSwitch::nReceivedNewMessage = true;
             // receive succeeded for protocol i
             break;
           }
