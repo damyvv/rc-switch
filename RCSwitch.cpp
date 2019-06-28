@@ -623,9 +623,9 @@ void RCSwitch::resetAvailable() {
   memset((void*) RCSwitch::nReceivedValue, 0, 64);
 }
 
-char* RCSwitch::getReceivedValue() {
+uint8_t* RCSwitch::getReceivedValue() {
   RCSwitch::nReceivedNewMessage = false;
-  return (char*) RCSwitch::nReceivedValue;
+  return (uint8_t*) RCSwitch::nReceivedValue;
 }
 
 unsigned int RCSwitch::getReceivedBitlength() {
