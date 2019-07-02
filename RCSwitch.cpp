@@ -570,6 +570,41 @@ void RCSwitch::send(unsigned long code, unsigned int length) {
 #endif
 }
 
+void sendArray(uint8_t* arr, unsigned int length) {
+  if (this->nTransmitterPin == -1) 
+    return;
+    
+#if not defined( RCSwitchDisableReceiving )
+  // make sure the receiver is disabled while we transmit
+  int nReceiverInterrupt_backup = nReceiverInterrupt;
+  if (nReceiverInterrupt_backup != -1) {
+    this->disableReceive();
+  }
+#endif
+  
+  for (int nRepeat = 0; nRepeat < nRepeatTransmit; nRepeat++) {
+    for (int j = 0; j < length; j++) {
+      for (int i = 7; i >= 0; i--) {
+        if (arr[j] & (1L << i))
+          this->transmit(protocol.one);
+        else
+          this->transmit(protocol.zero);
+      }
+    }
+    this->transmit(protocol.syncFactor);
+  }
+  
+  // Disable transmit after sending (i.e., for inverted protocols)
+  digitalWrite(this->nTransmitterPin, LOW);
+  
+#if not defined( RCSwitchDisableReceiving )
+  // enable receiver again if we just disabled it
+  if (nReceiverInterrupt_backup != -1) {
+    this->enableReceive(nReceiverInterrupt_backup);
+  }
+#endif
+}
+
 /**
  * Transmit a single high-low pulse.
  */
