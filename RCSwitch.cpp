@@ -570,7 +570,7 @@ void RCSwitch::send(unsigned long code, unsigned int length) {
 #endif
 }
 
-void sendArray(uint8_t* arr, unsigned int length) {
+void RCSwitch::sendArray(const uint8_t* arr, unsigned int length) {
   if (this->nTransmitterPin == -1) 
     return;
     
